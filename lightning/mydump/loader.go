@@ -10,6 +10,7 @@ import (
 	"github.com/pingcap/tidb-enterprise-tools/pkg/filter"
 	"github.com/pingcap/tidb-lightning/lightning/common"
 	"github.com/pingcap/tidb-lightning/lightning/config"
+	"github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pkg/errors"
 )
 
@@ -68,6 +69,7 @@ type MDLoader struct {
 	noSchema bool
 	dbs      []*MDDatabaseMeta
 	filter   *filter.Filter
+	router   *router.Table
 	charSet  string
 }
 
@@ -81,10 +83,20 @@ type mdLoaderSetup struct {
 }
 
 func NewMyDumpLoader(cfg *config.Config) (*MDLoader, error) {
+	var r *router.Table
+	if len(cfg.Routes) > 0 {
+		var err error
+		r, err = router.NewTableRouter(false, cfg.Routes)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
 	mdl := &MDLoader{
 		dir:      cfg.Mydumper.SourceDir,
 		noSchema: cfg.Mydumper.NoSchema,
 		filter:   filter.New(false, cfg.BWList),
+		router:   r,
 		charSet:  cfg.Mydumper.CharacterSet,
 	}
 
@@ -155,6 +167,9 @@ func (s *mdLoaderSetup) setup(dir string) error {
 		common.AppLogger.Errorf("list file failed : %s", err.Error())
 		return errors.Trace(err)
 	}
+	if err := s.route(); err != nil {
+		return errors.Trace(err)
+	}
 
 	if !s.loader.noSchema {
 		// setup database schema
@@ -162,7 +177,7 @@ func (s *mdLoaderSetup) setup(dir string) error {
 			return errors.Annotatef(errMissingFile, "missing {schema}-schema-create.sql")
 		}
 		for _, fileInfo := range s.dbSchemas {
-			if _, dbExists := s.insertDB(fileInfo.tableName.Schema, fileInfo.path); dbExists {
+			if _, dbExists := s.insertDB(fileInfo.tableName.Schema, fileInfo.path); dbExists && s.loader.router == nil {
 				return errors.Errorf("invalid database schema file, duplicated item - %s", fileInfo.path)
 			}
 		}
@@ -172,7 +187,7 @@ func (s *mdLoaderSetup) setup(dir string) error {
 			_, dbExists, tableExists := s.insertTable(fileInfo.tableName, fileInfo.path)
 			if !dbExists {
 				return errors.Errorf("invalid table schema file, cannot find db - %s", fileInfo.path)
-			} else if tableExists {
+			} else if tableExists && s.loader.router == nil {
 				return errors.Errorf("invalid table schema file, duplicated item - %s", fileInfo.path)
 			}
 		}
@@ -267,6 +282,45 @@ func (s *mdLoaderSetup) listFiles(dir string) error {
 
 func (l *MDLoader) shouldSkip(table *filter.Table) bool {
 	return len(l.filter.ApplyOn([]*filter.Table{table})) == 0
+}
+
+func (s *mdLoaderSetup) route() error {
+	r := s.loader.router
+	if r == nil {
+		return nil
+	}
+
+	knownDBNames := make(map[string]string)
+	for _, info := range s.dbSchemas {
+		knownDBNames[info.tableName.Schema] = info.path
+	}
+
+	run := func(arr []fileInfo) error {
+		for i, info := range arr {
+			dbName, tableName, err := r.Route(info.tableName.Schema, info.tableName.Name)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if _, ok := knownDBNames[dbName]; !ok {
+				path := knownDBNames[info.tableName.Schema]
+				knownDBNames[dbName] = path
+				s.dbSchemas = append(s.dbSchemas, fileInfo{
+					tableName: filter.Table{Schema: dbName},
+					path:      path,
+				})
+			}
+			arr[i].tableName = filter.Table{Schema: dbName, Name: tableName}
+		}
+		return nil
+	}
+
+	if err := run(s.tableSchemas); err != nil {
+		return errors.Trace(err)
+	}
+	if err := run(s.tableDatas); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 func (s *mdLoaderSetup) insertDB(dbName string, path string) (*MDDatabaseMeta, bool) {
