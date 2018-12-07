@@ -18,6 +18,7 @@ require (
 	github.com/pingcap/parser v0.0.0-20181113072426-4a9a1b13b591
 	github.com/pingcap/tidb v0.0.0-20181120082053-012cb6da9443
 	github.com/pingcap/tidb-enterprise-tools v1.0.1-0.20181116033341-5832f7307d74
+	github.com/pingcap/tidb-tools v0.0.0-20181112132202-4860a0d5de03
 	github.com/pkg/errors v0.8.0
 	github.com/prometheus/client_golang v0.9.0
 	github.com/prometheus/client_model v0.0.0-20180712105110-5c3871d89910

@@ -178,6 +178,8 @@ github.com/pingcap/tidb/util/tracing
 # github.com/pingcap/tidb-enterprise-tools v1.0.1-0.20181116033341-5832f7307d74
 github.com/pingcap/tidb-enterprise-tools/pkg/filter
 # github.com/pingcap/tidb-tools v0.0.0-20181112132202-4860a0d5de03
+github.com/pingcap/tidb-tools/pkg/table-router
+github.com/pingcap/tidb-tools/pkg/table-rule-selector
 github.com/pingcap/tidb-tools/tidb-binlog/pump_client
 github.com/pingcap/tidb-tools/pkg/etcd
 github.com/pingcap/tidb-tools/pkg/utils
