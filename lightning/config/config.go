@@ -11,6 +11,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/tidb-enterprise-tools/pkg/filter"
 	"github.com/pingcap/tidb-lightning/lightning/common"
+	"github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pkg/errors"
 )
 
@@ -45,12 +46,13 @@ type Config struct {
 
 	// not implemented yet.
 	// ProgressStore DBStore `toml:"progress-store" json:"progress-store"`
-	Checkpoint   Checkpoint      `toml:"checkpoint" json:"checkpoint"`
-	Mydumper     MydumperRuntime `toml:"mydumper" json:"mydumper"`
-	BWList       *filter.Rules   `toml:"black-white-list" json:"black-white-list"`
-	TikvImporter TikvImporter    `toml:"tikv-importer" json:"tikv-importer"`
-	PostRestore  PostRestore     `toml:"post-restore" json:"post-restore"`
-	Cron         Cron            `toml:"cron" json:"cron"`
+	Checkpoint   Checkpoint          `toml:"checkpoint" json:"checkpoint"`
+	Mydumper     MydumperRuntime     `toml:"mydumper" json:"mydumper"`
+	BWList       *filter.Rules       `toml:"black-white-list" json:"black-white-list"`
+	TikvImporter TikvImporter        `toml:"tikv-importer" json:"tikv-importer"`
+	PostRestore  PostRestore         `toml:"post-restore" json:"post-restore"`
+	Cron         Cron                `toml:"cron" json:"cron"`
+	Routes       []*router.TableRule `toml:"routes" json:"routes"`
 
 	// command line flags
 	ConfigFile   string `json:"config-file"`
@@ -212,6 +214,13 @@ func (cfg *Config) Load() error {
 			cfg.Checkpoint.DSN = common.ToDSN(cfg.TiDB.Host, cfg.TiDB.Port, cfg.TiDB.User, cfg.TiDB.Psw)
 		case "file":
 			cfg.Checkpoint.DSN = "/tmp/" + cfg.Checkpoint.Schema + ".pb"
+		}
+	}
+
+	for _, rule := range cfg.Routes {
+		rule.ToLower()
+		if err := rule.Valid(); err != nil {
+			return errors.Trace(err)
 		}
 	}
 
