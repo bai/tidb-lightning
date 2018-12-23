@@ -1343,8 +1343,9 @@ func (cr *chunkRestore) restore(
 		default:
 		}
 
-		endOffset := mathutil.MinInt64(cr.chunk.Chunk.EndOffset, cr.parser.Pos()+rc.cfg.Mydumper.ReadBlockSize)
-		if cr.parser.Pos() >= endOffset {
+		offset, _ := cr.parser.Pos()
+		endOffset := mathutil.MinInt64(cr.chunk.Chunk.EndOffset, offset+rc.cfg.Mydumper.ReadBlockSize)
+		if offset >= endOffset {
 			break
 		}
 
@@ -1353,7 +1354,11 @@ func (cr *chunkRestore) restore(
 
 		var sep byte = ' '
 	readLoop:
-		for cr.parser.Pos() < endOffset {
+		for {
+			offset, _ := cr.parser.Pos()
+			if offset >= endOffset {
+				break
+			}
 			err := cr.parser.ReadRow()
 			switch errors.Cause(err) {
 			case nil:
@@ -1376,7 +1381,7 @@ func (cr *chunkRestore) restore(
 					buffer.Write(lastRow.Row)
 				}
 			case io.EOF:
-				cr.chunk.Chunk.EndOffset = cr.parser.Pos()
+				cr.chunk.Chunk.EndOffset, cr.chunk.Chunk.RowIDMax = cr.parser.Pos()
 				break readLoop
 			default:
 				return errors.Trace(err)
@@ -1415,8 +1420,7 @@ func (cr *chunkRestore) restore(
 		}
 		block.totalKVs = append(block.totalKVs, kvs...)
 		block.localChecksum.Update(kvs)
-		block.chunkOffset = cr.parser.Pos()
-		block.chunkRowID = cr.parser.LastRow().RowID
+		block.chunkOffset, block.chunkRowID = cr.parser.Pos()
 		block.cond.Signal()
 		block.cond.L.Unlock()
 	}

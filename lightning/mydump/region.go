@@ -3,6 +3,7 @@ package mydump
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -63,7 +64,12 @@ func MakeTableRegions(meta *MDTableMeta, columns int) ([]*TableRegion, error) {
 			return nil, errors.Annotatef(err, "cannot stat %s", dataFile)
 		}
 		dataFileSize := dataFileInfo.Size()
-		rowIDMax := prevRowIDMax + dataFileSize/(int64(columns)+2)
+
+		divisor := int64(columns)
+		if strings.HasSuffix(strings.ToLower(dataFile), ".sql") {
+			divisor += 2
+		}
+		rowIDMax := prevRowIDMax + dataFileSize/divisor
 		filesRegions = append(filesRegions, &TableRegion{
 			ID:    i,
 			DB:    meta.DB,
